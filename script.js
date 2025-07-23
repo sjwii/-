@@ -1,167 +1,189 @@
+// 패들 그리기
+function drawPaddle() {
+    ctx.save();
+    ctx.fillStyle = '#1976d2';
+    ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+    ctx.restore();
+}
 
-// 2D 슈팅 게임 (비행기 vs 외계인)
+// 공 그리기
+function drawBall() {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffafcc';
+    ctx.shadowColor = '#bde0fe';
+    ctx.shadowBlur = 12;
+    ctx.fill();
+    ctx.restore();
+}
+
+// 벽돌 그리기
+function drawBricks() {
+    for (let r = 0; r < BRICK_ROW; r++) {
+        for (let c = 0; c < BRICK_COL; c++) {
+            if (!bricks[r][c].destroyed) {
+                let brickX = BRICK_OFFSET_LEFT + c * (BRICK_WIDTH + BRICK_PADDING);
+                let brickY = BRICK_OFFSET_TOP + r * (BRICK_HEIGHT + BRICK_PADDING);
+                bricks[r][c].x = brickX;
+                bricks[r][c].y = brickY;
+                ctx.save();
+                ctx.fillStyle = `hsl(${r*60 + c*10}, 70%, 60%)`;
+                ctx.fillRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(brickX, brickY, BRICK_WIDTH, BRICK_HEIGHT);
+                ctx.restore();
+            }
+        }
+    }
+}
+
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const restartBtn = document.getElementById('restart-btn');
 const scoreBoard = document.getElementById('score-board');
 
-const PLAYER_WIDTH = 48;
-const PLAYER_HEIGHT = 48;
-const PLAYER_Y = canvas.height - PLAYER_HEIGHT - 16;
-const PLAYER_SPEED = 8;
-const BULLET_WIDTH = 6;
-const BULLET_HEIGHT = 18;
-const BULLET_SPEED = 12;
-const ENEMY_WIDTH = 44;
-const ENEMY_HEIGHT = 44;
-const ENEMY_SPEED_BASE = 2.5;
-const ENEMY_SPAWN_INTERVAL = 60;
+// 게임 설정
+const PADDLE_WIDTH = 120;
+const PADDLE_HEIGHT = 18;
+const PADDLE_Y = canvas.height - 40;
+const BALL_RADIUS = 12;
+const BALL_SPEED = 6;
+const BRICK_ROW = 5;
+const BRICK_COL = 10;
+const BRICK_WIDTH = 68;
+const BRICK_HEIGHT = 28;
+const BRICK_PADDING = 12;
+const BRICK_OFFSET_TOP = 40;
+const BRICK_OFFSET_LEFT = 32;
 
-let player, bullets, enemies, score, gameOver, animationId, leftPressed, rightPressed, frameCount;
+let paddle, ball, bricks, score, gameOver, animationId, leftPressed, rightPressed;
 
 function resetGame() {
-    player = {
-        x: canvas.width / 2 - PLAYER_WIDTH / 2,
-        y: PLAYER_Y,
-        width: PLAYER_WIDTH,
-        height: PLAYER_HEIGHT
+    paddle = {
+        x: canvas.width / 2 - PADDLE_WIDTH / 2,
+        y: PADDLE_Y,
+        width: PADDLE_WIDTH,
+        height: PADDLE_HEIGHT
     };
-    bullets = [];
-    enemies = [];
+    ball = {
+        x: canvas.width / 2,
+        y: PADDLE_Y - BALL_RADIUS - 2,
+        dx: BALL_SPEED * (Math.random() > 0.5 ? 1 : -1),
+        dy: -BALL_SPEED,
+        radius: BALL_RADIUS
+    };
+    bricks = [];
+    for (let r = 0; r < BRICK_ROW; r++) {
+        bricks[r] = [];
+        for (let c = 0; c < BRICK_COL; c++) {
+            bricks[r][c] = { x: 0, y: 0, destroyed: false };
+        }
+    }
     score = 0;
     gameOver = false;
     leftPressed = false;
     rightPressed = false;
-    frameCount = 0;
     scoreBoard.textContent = '';
     restartBtn.style.display = 'none';
     if (animationId) cancelAnimationFrame(animationId);
     loop();
 }
-
-function drawPlayer() {
-    ctx.save();
-    ctx.translate(player.x + player.width/2, player.y + player.height/2);
-    ctx.fillStyle = '#1976d2';
-    ctx.beginPath();
-    ctx.moveTo(0, -22);
-    ctx.lineTo(18, 18);
-    ctx.lineTo(0, 10);
-    ctx.lineTo(-18, 18);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#b5ead7';
-    ctx.beginPath();
-    ctx.ellipse(0, -8, 7, 10, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#f9c74f';
-    ctx.fillRect(-22, 6, 44, 7);
-    ctx.fillStyle = '#ffafcc';
-    ctx.fillRect(-6, 14, 12, 8);
-    ctx.restore();
-}
-
-function drawBullets() {
-    ctx.save();
-    ctx.fillStyle = '#ffafcc';
-    for (let b of bullets) {
-        ctx.fillRect(b.x, b.y, BULLET_WIDTH, BULLET_HEIGHT);
-    }
-    ctx.restore();
-}
-
-function drawEnemies() {
-    for (let e of enemies) {
-        ctx.save();
-        ctx.translate(e.x + e.width/2, e.y + e.height/2);
-        ctx.fillStyle = '#43aa8b';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, e.width/2, e.height/2, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.ellipse(-10, -6, 6, 8, 0, 0, Math.PI*2);
-        ctx.ellipse(10, -6, 6, 8, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#333';
-        ctx.beginPath();
-        ctx.arc(-10, -6, 2, 0, Math.PI*2);
-        ctx.arc(10, -6, 2, 0, Math.PI*2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 8, 8, 0, Math.PI);
-        ctx.stroke();
-        ctx.strokeStyle = '#b5ead7';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-8, -e.height/2 + 4); ctx.lineTo(-16, -e.height/2 - 10);
-        ctx.moveTo(8, -e.height/2 + 4); ctx.lineTo(16, -e.height/2 - 10);
-        ctx.stroke();
-        ctx.restore();
-    }
-}
-
 function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawPlayer();
-    drawBullets();
-    drawEnemies();
+    drawPaddle();
+    drawBall();
+    drawBricks();
 
-    if (leftPressed) player.x -= PLAYER_SPEED;
-    if (rightPressed) player.x += PLAYER_SPEED;
-    player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+    // 패들 이동
+    if (leftPressed) paddle.x -= 12;
+    if (rightPressed) paddle.x += 12;
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
 
-    for (let b of bullets) {
-        b.y -= BULLET_SPEED;
+    // 남은 벽돌 개수에 따라 속도 증가
+    const totalBricks = BRICK_ROW * BRICK_COL;
+    const bricksLeft = totalBricks - score;
+    // 최소 1.0, 최대 2.5배까지 빨라짐
+    const speedMultiplier = 1 + (1.5 * (1 - bricksLeft / totalBricks));
+
+    // 공 이동
+    ball.x += ball.dx * speedMultiplier;
+    ball.y += ball.dy * speedMultiplier;
+
+    // 벽 충돌
+    if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
+        ball.dx *= -1;
     }
-    bullets = bullets.filter(b => b.y + BULLET_HEIGHT > 0);
-
-    let enemySpeed = ENEMY_SPEED_BASE + Math.floor(score / 10) * 0.7;
-    for (let e of enemies) {
-        e.y += enemySpeed;
+    if (ball.y - ball.radius < 0) {
+        ball.dy *= -1;
     }
-    for (let e of enemies) {
-        if (e.y + e.height >= player.y && e.x < player.x + player.width && e.x + e.width > player.x) {
-            endGame();
-            return;
-        }
-    }
-    enemies = enemies.filter(e => e.y < canvas.height);
 
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = enemies.length - 1; j >= 0; j--) {
-            let b = bullets[i], e = enemies[j];
-            if (b.x < e.x + e.width && b.x + BULLET_WIDTH > e.x && b.y < e.y + e.height && b.y + BULLET_HEIGHT > e.y) {
-                bullets.splice(i, 1);
-                enemies.splice(j, 1);
-                score++;
-                break;
+    // 패들 충돌
+    if (
+        ball.y + ball.radius >= paddle.y &&
+        ball.x > paddle.x &&
+        ball.x < paddle.x + paddle.width &&
+        ball.dy > 0
+    ) {
+        // 반사 각도 조정
+        let hit = (ball.x - (paddle.x + paddle.width/2)) / (paddle.width/2);
+        ball.dx = BALL_SPEED * hit;
+        ball.dy = -BALL_SPEED;
+    }
+
+    // 벽돌 충돌
+    for (let r = 0; r < BRICK_ROW; r++) {
+        for (let c = 0; c < BRICK_COL; c++) {
+            let brick = bricks[r][c];
+            if (!brick.destroyed) {
+                if (
+                    ball.x + ball.radius > brick.x &&
+                    ball.x - ball.radius < brick.x + BRICK_WIDTH &&
+                    ball.y + ball.radius > brick.y &&
+                    ball.y - ball.radius < brick.y + BRICK_HEIGHT
+                ) {
+                    brick.destroyed = true;
+                    score++;
+                    // 충돌 방향 반전
+                    let prevX = ball.x - ball.dx * speedMultiplier;
+                    let prevY = ball.y - ball.dy * speedMultiplier;
+                    if (
+                        prevY + ball.radius <= brick.y ||
+                        prevY - ball.radius >= brick.y + BRICK_HEIGHT
+                    ) {
+                        ball.dy *= -1;
+                    } else {
+                        ball.dx *= -1;
+                    }
+                }
             }
         }
     }
 
-    if (frameCount % ENEMY_SPAWN_INTERVAL === 0) {
-        let ex = Math.random() * (canvas.width - ENEMY_WIDTH);
-        enemies.push({ x: ex, y: -ENEMY_HEIGHT, width: ENEMY_WIDTH, height: ENEMY_HEIGHT });
+    // 게임 오버
+    if (ball.y - ball.radius > canvas.height) {
+        endGame();
+        return;
     }
-    frameCount++;
+
+    // 클리어
+    if (score === BRICK_ROW * BRICK_COL) {
+        scoreBoard.innerHTML = `<span style="color:#43aa8b;">축하합니다!<br>모든 벽돌을 깼어요!</span>`;
+        restartBtn.style.display = 'inline-block';
+        cancelAnimationFrame(animationId);
+        return;
+    }
 
     ctx.save();
-    ctx.font = 'bold 1.7rem Pretendard, Segoe UI, sans-serif';
-    ctx.fillStyle = '#333';
-    ctx.fillText(`점수: ${score}`, 24, 44);
+    ctx.font = 'bold 1.3rem Pretendard, Segoe UI, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`점수: ${score}`, 24, 32);
     ctx.restore();
 
     animationId = requestAnimationFrame(loop);
 }
 
-function shoot() {
-    if (gameOver) return;
-    if (bullets.length && bullets[bullets.length-1].y > player.y - 60) return;
-    bullets.push({ x: player.x + player.width/2 - BULLET_WIDTH/2, y: player.y - BULLET_HEIGHT });
-}
 
 function endGame() {
     gameOver = true;
@@ -173,7 +195,6 @@ function endGame() {
 window.addEventListener('keydown', e => {
     if (e.code === 'ArrowLeft') leftPressed = true;
     if (e.code === 'ArrowRight') rightPressed = true;
-    if (e.code === 'Space') shoot();
 });
 window.addEventListener('keyup', e => {
     if (e.code === 'ArrowLeft') leftPressed = false;
@@ -182,391 +203,3 @@ window.addEventListener('keyup', e => {
 restartBtn.addEventListener('click', resetGame);
 
 resetGame();
-
-// 2D 슈팅 게임 (비행기 vs 외계인)
-const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext('2d');
-const restartBtn = document.getElementById('restart-btn');
-const scoreBoard = document.getElementById('score-board');
-
-const PLAYER_WIDTH = 48;
-const PLAYER_HEIGHT = 48;
-const PLAYER_Y = canvas.height - PLAYER_HEIGHT - 16;
-const PLAYER_SPEED = 8;
-const BULLET_WIDTH = 6;
-const BULLET_HEIGHT = 18;
-const BULLET_SPEED = 12;
-const ENEMY_WIDTH = 44;
-const ENEMY_HEIGHT = 44;
-const ENEMY_SPEED_BASE = 2.5;
-const ENEMY_SPAWN_INTERVAL = 60;
-
-let player, bullets, enemies, score, gameOver, animationId, leftPressed, rightPressed, frameCount;
-
-function resetGame() {
-    player = {
-        x: canvas.width / 2 - PLAYER_WIDTH / 2,
-        y: PLAYER_Y,
-        width: PLAYER_WIDTH,
-        height: PLAYER_HEIGHT
-    };
-    bullets = [];
-    enemies = [];
-    score = 0;
-    gameOver = false;
-    leftPressed = false;
-    rightPressed = false;
-    frameCount = 0;
-    scoreBoard.textContent = '';
-    restartBtn.style.display = 'none';
-    if (animationId) cancelAnimationFrame(animationId);
-    loop();
-}
-
-function drawPlayer() {
-    ctx.save();
-    ctx.translate(player.x + player.width/2, player.y + player.height/2);
-    ctx.fillStyle = '#1976d2';
-    ctx.beginPath();
-    ctx.moveTo(0, -22);
-    ctx.lineTo(18, 18);
-    ctx.lineTo(0, 10);
-    ctx.lineTo(-18, 18);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#b5ead7';
-    ctx.beginPath();
-    ctx.ellipse(0, -8, 7, 10, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#f9c74f';
-    ctx.fillRect(-22, 6, 44, 7);
-    ctx.fillStyle = '#ffafcc';
-    ctx.fillRect(-6, 14, 12, 8);
-    ctx.restore();
-}
-
-function drawBullets() {
-    ctx.save();
-    ctx.fillStyle = '#ffafcc';
-    for (let b of bullets) {
-        ctx.fillRect(b.x, b.y, BULLET_WIDTH, BULLET_HEIGHT);
-    }
-    ctx.restore();
-}
-
-function drawEnemies() {
-    for (let e of enemies) {
-        ctx.save();
-        ctx.translate(e.x + e.width/2, e.y + e.height/2);
-        ctx.fillStyle = '#43aa8b';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, e.width/2, e.height/2, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.ellipse(-10, -6, 6, 8, 0, 0, Math.PI*2);
-        ctx.ellipse(10, -6, 6, 8, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#333';
-        ctx.beginPath();
-        ctx.arc(-10, -6, 2, 0, Math.PI*2);
-        ctx.arc(10, -6, 2, 0, Math.PI*2);
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 8, 8, 0, Math.PI);
-        ctx.stroke();
-        ctx.strokeStyle = '#b5ead7';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-8, -e.height/2 + 4); ctx.lineTo(-16, -e.height/2 - 10);
-        ctx.moveTo(8, -e.height/2 + 4); ctx.lineTo(16, -e.height/2 - 10);
-        ctx.stroke();
-        ctx.restore();
-    }
-}
-
-function loop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawPlayer();
-    drawBullets();
-    drawEnemies();
-
-    if (leftPressed) player.x -= PLAYER_SPEED;
-    if (rightPressed) player.x += PLAYER_SPEED;
-    player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-
-    for (let b of bullets) {
-        b.y -= BULLET_SPEED;
-    }
-    bullets = bullets.filter(b => b.y + BULLET_HEIGHT > 0);
-
-    let enemySpeed = ENEMY_SPEED_BASE + Math.floor(score / 10) * 0.7;
-    for (let e of enemies) {
-        e.y += enemySpeed;
-    }
-    for (let e of enemies) {
-        if (e.y + e.height >= player.y && e.x < player.x + player.width && e.x + e.width > player.x) {
-            endGame();
-            return;
-        }
-    }
-    enemies = enemies.filter(e => e.y < canvas.height);
-
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = enemies.length - 1; j >= 0; j--) {
-            let b = bullets[i], e = enemies[j];
-            if (b.x < e.x + e.width && b.x + BULLET_WIDTH > e.x && b.y < e.y + e.height && b.y + BULLET_HEIGHT > e.y) {
-                bullets.splice(i, 1);
-                enemies.splice(j, 1);
-                score++;
-                break;
-            }
-        }
-    }
-
-    if (frameCount % ENEMY_SPAWN_INTERVAL === 0) {
-        let ex = Math.random() * (canvas.width - ENEMY_WIDTH);
-        enemies.push({ x: ex, y: -ENEMY_HEIGHT, width: ENEMY_WIDTH, height: ENEMY_HEIGHT });
-    }
-    frameCount++;
-
-    ctx.save();
-    ctx.font = 'bold 1.7rem Pretendard, Segoe UI, sans-serif';
-    ctx.fillStyle = '#333';
-    ctx.fillText(`점수: ${score}`, 24, 44);
-    ctx.restore();
-
-    animationId = requestAnimationFrame(loop);
-}
-
-function shoot() {
-    if (gameOver) return;
-    if (bullets.length && bullets[bullets.length-1].y > player.y - 60) return;
-    bullets.push({ x: player.x + player.width/2 - BULLET_WIDTH/2, y: player.y - BULLET_HEIGHT });
-}
-
-function endGame() {
-    gameOver = true;
-    scoreBoard.innerHTML = `<span style="color:#ff6f91;">게임 오버!<br>최종 점수: <b>${score}</b></span>`;
-    restartBtn.style.display = 'inline-block';
-    cancelAnimationFrame(animationId);
-}
-
-window.addEventListener('keydown', e => {
-    if (e.code === 'ArrowLeft') leftPressed = true;
-    if (e.code === 'ArrowRight') rightPressed = true;
-    if (e.code === 'Space') shoot();
-});
-window.addEventListener('keyup', e => {
-    if (e.code === 'ArrowLeft') leftPressed = false;
-    if (e.code === 'ArrowRight') rightPressed = false;
-});
-restartBtn.addEventListener('click', resetGame);
-
-resetGame();
-
-// 2D 슈팅 게임
-const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext('2d');
-const restartBtn = document.getElementById('restart-btn');
-const scoreBoard = document.getElementById('score-board');
-
-const PLAYER_WIDTH = 48;
-const PLAYER_HEIGHT = 48;
-const PLAYER_Y = canvas.height - PLAYER_HEIGHT - 16;
-const PLAYER_SPEED = 8;
-const BULLET_WIDTH = 6;
-const BULLET_HEIGHT = 18;
-const BULLET_SPEED = 12;
-const ENEMY_WIDTH = 44;
-const ENEMY_HEIGHT = 44;
-const ENEMY_SPEED_BASE = 2.5;
-const ENEMY_SPAWN_INTERVAL = 60; // 프레임 단위
-
-let player, bullets, enemies, score, gameOver, animationId, leftPressed, rightPressed, spacePressed, frameCount;
-
-function resetGame() {
-    player = {
-        x: canvas.width / 2 - PLAYER_WIDTH / 2,
-        y: PLAYER_Y,
-        width: PLAYER_WIDTH,
-        height: PLAYER_HEIGHT
-    };
-    bullets = [];
-    enemies = [];
-    score = 0;
-    gameOver = false;
-    leftPressed = false;
-    rightPressed = false;
-    spacePressed = false;
-    frameCount = 0;
-    scoreBoard.textContent = '';
-    restartBtn.style.display = 'none';
-    if (animationId) cancelAnimationFrame(animationId);
-    loop();
-}
-
-function drawPlayer() {
-    // 전투 비행기(간단한 도형 조합)
-    ctx.save();
-    ctx.translate(player.x + player.width/2, player.y + player.height/2);
-    // 본체
-    ctx.fillStyle = '#1976d2';
-    ctx.beginPath();
-    ctx.moveTo(0, -22); // 앞
-    ctx.lineTo(18, 18); // 오른쪽 뒤
-    ctx.lineTo(0, 10); // 중앙 뒤
-    ctx.lineTo(-18, 18); // 왼쪽 뒤
-    ctx.closePath();
-    ctx.fill();
-    // 조종석
-    ctx.fillStyle = '#b5ead7';
-    ctx.beginPath();
-    ctx.ellipse(0, -8, 7, 10, 0, 0, Math.PI*2);
-    ctx.fill();
-    // 날개
-    ctx.fillStyle = '#f9c74f';
-    ctx.fillRect(-22, 6, 44, 7);
-    // 꼬리날개
-    ctx.fillStyle = '#ffafcc';
-    ctx.fillRect(-6, 14, 12, 8);
-    ctx.restore();
-}
-
-function drawBullets() {
-    ctx.save();
-    ctx.fillStyle = '#ffafcc';
-    for (let b of bullets) {
-        ctx.fillRect(b.x, b.y, BULLET_WIDTH, BULLET_HEIGHT);
-    }
-    ctx.restore();
-}
-
-function drawEnemies() {
-    for (let e of enemies) {
-        ctx.save();
-        ctx.translate(e.x + e.width/2, e.y + e.height/2);
-        // 외계인 몸통
-        ctx.fillStyle = '#43aa8b';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, e.width/2, e.height/2, 0, 0, Math.PI*2);
-        ctx.fill();
-        // 눈
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.ellipse(-10, -6, 6, 8, 0, 0, Math.PI*2);
-        ctx.ellipse(10, -6, 6, 8, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle = '#333';
-        ctx.beginPath();
-        ctx.arc(-10, -6, 2, 0, Math.PI*2);
-        ctx.arc(10, -6, 2, 0, Math.PI*2);
-        ctx.fill();
-        // 입
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 8, 8, 0, Math.PI);
-        ctx.stroke();
-        // 더듬이
-        ctx.strokeStyle = '#b5ead7';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-8, -e.height/2 + 4); ctx.lineTo(-16, -e.height/2 - 10);
-        ctx.moveTo(8, -e.height/2 + 4); ctx.lineTo(16, -e.height/2 - 10);
-        ctx.stroke();
-        ctx.restore();
-    }
-}
-
-function loop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawPlayer();
-    drawBullets();
-    drawEnemies();
-
-    // 플레이어 이동
-    if (leftPressed) player.x -= PLAYER_SPEED;
-    if (rightPressed) player.x += PLAYER_SPEED;
-    player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-
-    // 총알 이동
-    for (let b of bullets) {
-        b.y -= BULLET_SPEED;
-    }
-    // 총알 화면 밖 제거
-    bullets = bullets.filter(b => b.y + BULLET_HEIGHT > 0);
-
-    // 적 이동
-    let enemySpeed = ENEMY_SPEED_BASE + Math.floor(score / 10) * 0.7;
-    for (let e of enemies) {
-        e.y += enemySpeed;
-    }
-    // 적 화면 밖 제거 및 게임오버 체크
-    for (let e of enemies) {
-        if (e.y + e.height >= player.y && e.x < player.x + player.width && e.x + e.width > player.x) {
-            endGame();
-            return;
-        }
-    }
-    enemies = enemies.filter(e => e.y < canvas.height);
-
-    // 총알-적 충돌
-    for (let i = bullets.length - 1; i >= 0; i--) {
-        for (let j = enemies.length - 1; j >= 0; j--) {
-            let b = bullets[i], e = enemies[j];
-            if (b.x < e.x + e.width && b.x + BULLET_WIDTH > e.x && b.y < e.y + e.height && b.y + BULLET_HEIGHT > e.y) {
-                bullets.splice(i, 1);
-                enemies.splice(j, 1);
-                score++;
-                break;
-            }
-        }
-    }
-
-    // 적 생성
-    if (frameCount % ENEMY_SPAWN_INTERVAL === 0) {
-        let ex = Math.random() * (canvas.width - ENEMY_WIDTH);
-        enemies.push({ x: ex, y: -ENEMY_HEIGHT, width: ENEMY_WIDTH, height: ENEMY_HEIGHT });
-    }
-    frameCount++;
-
-    // 점수 표시
-    ctx.save();
-    ctx.font = 'bold 1.7rem Pretendard, Segoe UI, sans-serif';
-    ctx.fillStyle = '#333';
-    ctx.fillText(`점수: ${score}`, 24, 44);
-    ctx.restore();
-
-    animationId = requestAnimationFrame(loop);
-}
-
-function shoot() {
-    if (gameOver) return;
-    // 연사 방지: 이미 마지막 총알이 플레이어 위에 있으면 발사 안함
-    if (bullets.length && bullets[bullets.length-1].y > player.y - 60) return;
-    bullets.push({ x: player.x + player.width/2 - BULLET_WIDTH/2, y: player.y - BULLET_HEIGHT });
-}
-
-function endGame() {
-    gameOver = true;
-    scoreBoard.innerHTML = `<span style="color:#ff6f91;">게임 오버!<br>최종 점수: <b>${score}</b></span>`;
-    restartBtn.style.display = 'inline-block';
-    cancelAnimationFrame(animationId);
-}
-
-window.addEventListener('keydown', e => {
-    if (e.code === 'ArrowLeft') leftPressed = true;
-    if (e.code === 'ArrowRight') rightPressed = true;
-    if (e.code === 'Space') shoot();
-});
-window.addEventListener('keyup', e => {
-    if (e.code === 'ArrowLeft') leftPressed = false;
-    if (e.code === 'ArrowRight') rightPressed = false;
-});
-restartBtn.addEventListener('click', resetGame);
-
-resetGame();
-
